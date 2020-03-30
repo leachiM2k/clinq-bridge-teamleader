@@ -49,19 +49,17 @@ export interface ITeamleaderContact {
     web_url?: string | null
 }
 
-interface IZohoUpdate {
-    code: string,
-    status: string,
-    details: any,
-    message: string
-}
-
 export interface ITeamleaderContactsResponse {
     data: ITeamleaderContact[]
 }
 
-export interface IZohoUpdateResponse {
-    data: IZohoUpdate[],
+export interface ITeamleaderContactResponse {
+    data: ITeamleaderContact
+}
+
+export interface ITeamleaderUpdateResponse {
+    code: number,
+    data?: { type: string, id: string },
 }
 
 export enum RequestMethods {

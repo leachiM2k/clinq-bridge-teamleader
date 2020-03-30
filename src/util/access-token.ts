@@ -2,7 +2,7 @@ import { ITeamleaderAuthResponse, RequestMethods } from './interfaces';
 import { makeRequest } from './make-request';
 import parseEnvironment from './parse-environment';
 
-export async function authorizeApiKey(apiKey: string): Promise<{ accessToken: string }> {
+export async function authorizeApiKey(apiKey: string): Promise<{ accessToken: string, refreshToken: string }> {
     if (typeof apiKey !== "string" || !apiKey || apiKey.trim().length === 0) {
         throw new Error("Invalid API key.");
     }
@@ -12,9 +12,9 @@ export async function authorizeApiKey(apiKey: string): Promise<{ accessToken: st
         throw new Error('Could not extract refresh token from api key');
     }
 
-    const { access_token } = await getNewAccessToken(refreshToken);
+    const { access_token, refresh_token } = await getNewAccessToken(refreshToken);
     // TODO: maybe it is worth to cache the access token? (with the refresher token as key)
-    return { accessToken: access_token };
+    return { accessToken: access_token, refreshToken: refresh_token };
 }
 
 function getNewAccessToken(refreshToken: string): Promise<ITeamleaderAuthResponse> {

@@ -2,44 +2,76 @@ import { Contact, ContactTemplate, ContactUpdate } from '@clinq/bridge';
 import querystring from 'querystring';
 import { authorizeApiKey } from './access-token';
 import { convertContactToVendorContact, convertVendorContactToContact } from './contact';
-import { ITeamleaderAuthResponse, ITeamleaderContactsResponse, RequestMethods } from './interfaces';
+import {
+    ITeamleaderAuthResponse,
+    ITeamleaderContactResponse,
+    RequestMethods
+} from './interfaces';
 import { isContactResponse, isUpdateResponse, makeRequest } from './make-request';
 import parseEnvironment from './parse-environment';
 
 const apiDomain = 'https://api.teamleader.eu';
 
-export async function updateContact(
+export async function createContact(
     apiKey: string,
-    apiUrl: string,
-    contact: ContactUpdate | ContactTemplate
+    contact: ContactTemplate
 ): Promise<Contact> {
-    const { accessToken } = await authorizeApiKey(apiKey);
-    const id = (contact as ContactUpdate).id;
-    const vendorContactContact = convertContactToVendorContact(contact, id);
+    if (typeof apiKey !== "string" || !apiKey || apiKey.trim().length === 0) {
+        throw new Error("Invalid API key.");
+    }
+    const [accessToken, refreshToken] = apiKey.split(":");
+
+    if (!refreshToken) {
+        throw new Error('Could not extract refresh token from api key');
+    }
+
+    const vendorContactContact = convertContactToVendorContact(contact);
 
     const reqOptions = {
-        url: `${apiDomain}/contacts.list`,
-        method: id ? RequestMethods.PUT : RequestMethods.POST,
+        url: `${apiDomain}/contacts.add`,
+        method: RequestMethods.POST,
+        body: vendorContactContact
+    };
+    // TODO: handle expired access token
+    const response = await makeRequest(reqOptions, accessToken);
+
+    if (!response || !isUpdateResponse(response) || !response.data || !response.data.id) {
+        throw new Error(`Could not create Teamleader contact.`);
+    }
+
+    return getSingleContact(response.data.id, accessToken);
+}
+
+export async function updateContact(
+    apiKey: string,
+    contact: ContactUpdate
+): Promise<Contact> {
+    const { accessToken } = await authorizeApiKey(apiKey);
+    const vendorContactContact = convertContactToVendorContact(contact, contact.id);
+
+    const reqOptions = {
+        url: `${apiDomain}/contacts.update`,
+        method: RequestMethods.PUT,
         body: { data: [vendorContactContact] }
     };
     const response = await makeRequest(reqOptions, accessToken);
 
-    if (!response || !isUpdateResponse(response) || response.data.length !== 1) {
-        throw new Error("Received unexpected response from Teamleader");
+    if (!response || !isUpdateResponse(response) || response.code !== 204) {
+        throw new Error(`Could not update Teamleader contact.`);
     }
 
-    const [updateEntry] = response.data;
-    if (updateEntry.code !== 'SUCCESS') {
-        throw new Error(`Could not upsert Teamleader contact: ${updateEntry.message}`);
-    }
+    return getSingleContact(contact.id, accessToken);
+}
 
+async function getSingleContact(id: string, accessToken: string): Promise<Contact> {
     const reqGetOptions = {
-        url: `${apiDomain}/crm/v2/Contacts/${updateEntry.details.id}`,
+        url: `${apiDomain}/contacts.info`,
         method: RequestMethods.GET,
+        body: { id }
     };
     const responseGet = await makeRequest(reqGetOptions, accessToken);
 
-    const receivedContact = convertVendorContactToContact((responseGet as ITeamleaderContactsResponse).data[ 0 ]);
+    const receivedContact = convertVendorContactToContact((responseGet as ITeamleaderContactResponse).data);
     if (!receivedContact) {
         throw new Error("Could not parse received contact");
     }
@@ -48,7 +80,6 @@ export async function updateContact(
 
 export async function getContacts(
     apiKey: string,
-    apiUrl: string,
     page: number = 1,
     previousContacts?: Contact[]
 ): Promise<Contact[]> {
@@ -67,6 +98,7 @@ export async function getContacts(
         body: { page: { size: 20, number: page } }
     };
     // TODO: handle expired access token
+
     const response = await makeRequest(reqOptions, accessToken);
 
     if (!isContactResponse(response)) {
@@ -83,27 +115,23 @@ export async function getContacts(
     }
 
     if (response.data.length > 0) {
-        return getContacts(apiKey, apiUrl, page + 1, contacts);
+        return getContacts(apiKey, page + 1, contacts);
     }
 
     return contacts;
 }
 
-export async function deleteContact(apiKey: string, apiUrl: string, id: string): Promise<void> {
+export async function deleteContact(apiKey: string, id: string): Promise<void> {
     const { accessToken } = await authorizeApiKey(apiKey);
     const reqDeleteOptions = {
-        url: `${apiDomain}/crm/v2/Contacts/${id}`,
-        method: RequestMethods.DELETE,
+        url: `${apiDomain}/contacts.delete`,
+        method: RequestMethods.POST,
+        body: { id }
     };
     const response = await makeRequest(reqDeleteOptions, accessToken);
 
-    if (!response || !isUpdateResponse(response) || response.data.length !== 1) {
-        throw new Error("Received unexpected response from Teamleader");
-    }
-
-    const [updateEntry] = response.data;
-    if (updateEntry.code !== 'SUCCESS') {
-        throw new Error(`Could not delete Teamleader contact: ${updateEntry.code} / ${updateEntry.message}`);
+    if (!response || !isUpdateResponse(response) || response.code !== 204) {
+        throw new Error(`Could not delete Teamleader contact.`);
     }
 }
 

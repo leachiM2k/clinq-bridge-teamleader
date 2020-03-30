@@ -1,9 +1,24 @@
 import request from 'request';
-import { IRequest, ITeamleaderAuthResponse, ITeamleaderContactsResponse, IZohoUpdateResponse } from './interfaces';
+import {
+    IRequest,
+    ITeamleaderAuthResponse,
+    ITeamleaderContactResponse,
+    ITeamleaderContactsResponse,
+    ITeamleaderUpdateResponse
+} from './interfaces';
 
 const OAUTH_TOKEN_NAME = 'Bearer';
 
-export function makeRequest(options: IRequest, token?: string): Promise<ITeamleaderContactsResponse | IZohoUpdateResponse | ITeamleaderAuthResponse> {
+export class AccessTokenExpiredException implements Error {
+    public message: string;
+    public name: string;
+    constructor() {
+        this.message = 'Access token for Teamleader has expired. Use refresh token to get a new pair';
+        this.name = 'ACCESS_TOKEN_EXPIRED';
+    }
+}
+
+export function makeRequest(options: IRequest, token?: string): Promise<ITeamleaderContactResponse | ITeamleaderContactsResponse | ITeamleaderUpdateResponse | ITeamleaderAuthResponse> {
     const reqOptions = {
         ...options,
         json: true,
@@ -14,21 +29,28 @@ export function makeRequest(options: IRequest, token?: string): Promise<ITeamlea
     }
     return new Promise((resolve, reject) => {
         request(reqOptions, (err, resp, body) => {
-            if (err || body.error) {
-                return reject(`Error in Zoho response: ${(err && err.message) || body.error}`);
+            if (err) {
+                return reject(`Error in Teamleader response: ${(err && err.message)}`);
             }
 
+            if (body.errors && Array.isArray(body.errors) && body.errors.some((error: { title: string, status: number }) => error.title.includes('Access token'))) {
+                return reject(new AccessTokenExpiredException());
+            }
+
+            if (resp.statusCode !== 200) {
+                body.code = resp.statusCode;
+            }
             resolve(body);
         });
     });
 }
 
-export function isContactResponse(response: ITeamleaderContactsResponse | IZohoUpdateResponse | ITeamleaderAuthResponse): response is ITeamleaderContactsResponse {
+export function isContactResponse(response: ITeamleaderContactResponse | ITeamleaderContactsResponse | ITeamleaderUpdateResponse | ITeamleaderAuthResponse): response is ITeamleaderContactsResponse {
     const vendorContacts = (response as ITeamleaderContactsResponse);
     return Array.isArray(vendorContacts.data) && vendorContacts.data.length > 0 && vendorContacts.data[ 0 ].id !== undefined;
 }
 
-export function isUpdateResponse(response: ITeamleaderContactsResponse | IZohoUpdateResponse | ITeamleaderAuthResponse): response is IZohoUpdateResponse {
-    const zohoError = (response as IZohoUpdateResponse);
-    return Array.isArray(zohoError.data) && zohoError.data[ 0 ].code !== undefined;
+export function isUpdateResponse(response: ITeamleaderContactResponse | ITeamleaderContactsResponse | ITeamleaderUpdateResponse | ITeamleaderAuthResponse): response is ITeamleaderUpdateResponse {
+    const changedEntries = (response as ITeamleaderUpdateResponse);
+    return changedEntries.code !== undefined;
 }
