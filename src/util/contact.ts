@@ -52,7 +52,6 @@ function collectPhoneNumbersFromVendorContact(vendorContact: ITeamleaderContact)
 
 export function convertContactToVendorContact(contact: ContactUpdate | ContactTemplate, id?: string): ITeamleaderContact {
     const vendorContact: ITeamleaderContact = {
-        telephones: [],
         first_name: contact.firstName,
         last_name: contact.lastName
     };

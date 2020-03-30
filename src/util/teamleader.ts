@@ -7,32 +7,22 @@ import {
     ITeamleaderContactResponse,
     RequestMethods
 } from './interfaces';
-import { isContactResponse, isUpdateResponse, makeRequest } from './make-request';
+import { AccessTokenExpiredException, isContactResponse, isUpdateResponse, makeRequest } from './make-request';
 import parseEnvironment from './parse-environment';
 
 const apiDomain = 'https://api.teamleader.eu';
 
-export async function createContact(
-    apiKey: string,
+async function _createContact(
+    accessToken: string,
     contact: ContactTemplate
 ): Promise<Contact> {
-    if (typeof apiKey !== "string" || !apiKey || apiKey.trim().length === 0) {
-        throw new Error("Invalid API key.");
-    }
-    const [accessToken, refreshToken] = apiKey.split(":");
-
-    if (!refreshToken) {
-        throw new Error('Could not extract refresh token from api key');
-    }
-
-    const vendorContactContact = convertContactToVendorContact(contact);
+    const vendorContact = convertContactToVendorContact(contact);
 
     const reqOptions = {
         url: `${apiDomain}/contacts.add`,
         method: RequestMethods.POST,
-        body: vendorContactContact
+        body: vendorContact
     };
-    // TODO: handle expired access token
     const response = await makeRequest(reqOptions, accessToken);
 
     if (!response || !isUpdateResponse(response) || !response.data || !response.data.id) {
@@ -42,17 +32,16 @@ export async function createContact(
     return getSingleContact(response.data.id, accessToken);
 }
 
-export async function updateContact(
-    apiKey: string,
+async function _updateContact(
+    accessToken: string,
     contact: ContactUpdate
 ): Promise<Contact> {
-    const { accessToken } = await authorizeApiKey(apiKey);
-    const vendorContactContact = convertContactToVendorContact(contact, contact.id);
+    const vendorContact = convertContactToVendorContact(contact, contact.id);
 
     const reqOptions = {
         url: `${apiDomain}/contacts.update`,
-        method: RequestMethods.PUT,
-        body: { data: [vendorContactContact] }
+        method: RequestMethods.POST,
+        body: vendorContact
     };
     const response = await makeRequest(reqOptions, accessToken);
 
@@ -78,26 +67,16 @@ async function getSingleContact(id: string, accessToken: string): Promise<Contac
     return receivedContact;
 }
 
-export async function getContacts(
-    apiKey: string,
+async function _getContacts(
+    accessToken: string,
     page: number = 1,
     previousContacts?: Contact[]
 ): Promise<Contact[]> {
-    if (typeof apiKey !== "string" || !apiKey || apiKey.trim().length === 0) {
-        throw new Error("Invalid API key.");
-    }
-    const [accessToken, refreshToken] = apiKey.split(":");
-
-    if (!refreshToken) {
-        throw new Error('Could not extract refresh token from api key');
-    }
-
     const reqOptions = {
         url: `${apiDomain}/contacts.list`,
         method: RequestMethods.GET,
         body: { page: { size: 20, number: page } }
     };
-    // TODO: handle expired access token
 
     const response = await makeRequest(reqOptions, accessToken);
 
@@ -115,14 +94,13 @@ export async function getContacts(
     }
 
     if (response.data.length > 0) {
-        return getContacts(apiKey, page + 1, contacts);
+        return _getContacts(accessToken, page + 1, contacts);
     }
 
     return contacts;
 }
 
-export async function deleteContact(apiKey: string, id: string): Promise<void> {
-    const { accessToken } = await authorizeApiKey(apiKey);
+async function _deleteContact(accessToken: string, id: string): Promise<void> {
     const reqDeleteOptions = {
         url: `${apiDomain}/contacts.delete`,
         method: RequestMethods.POST,
@@ -134,6 +112,32 @@ export async function deleteContact(apiKey: string, id: string): Promise<void> {
         throw new Error(`Could not delete Teamleader contact.`);
     }
 }
+
+const refreshTokenOnError = <T, A extends [any] | any[]>(fn: (accessToken: string, ...a: A) => Promise<T>): ((apiKey: string, ...args: A) => Promise<T>) => {
+    return async (apiKey: string, ...args: A) => {
+        let { accessToken, refreshToken } = await authorizeApiKey(apiKey, false);
+
+        try {
+            return await fn(accessToken, ...args);
+        } catch (e) {
+            if (e instanceof AccessTokenExpiredException) {
+                const refreshedToken = await authorizeApiKey(apiKey, true);
+                accessToken = refreshedToken.accessToken;
+                refreshToken = refreshedToken.refreshToken;
+                // TODO: we need to write the refresh token back!! Otherwise the credentials will stop working in 2 * 1 hour
+                // console.log('*************************** accessToken', accessToken);
+                // console.log('*************************** refreshToken', refreshToken);
+                return fn(accessToken, ...args);
+            }
+            throw e;
+        }
+    };
+};
+
+export const createContact = refreshTokenOnError(_createContact);
+export const updateContact = refreshTokenOnError(_updateContact);
+export const getContacts = refreshTokenOnError(_getContacts);
+export const deleteContact = refreshTokenOnError(_deleteContact);
 
 export function getTokens(code: string): Promise<ITeamleaderAuthResponse> {
     const { TEAMLEADER_CLIENT_ID, TEAMLEADER_CLIENT_SECRET, TEAMLEADER_REDIRECT_URL } = parseEnvironment();

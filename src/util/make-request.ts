@@ -33,16 +33,24 @@ export function makeRequest(options: IRequest, token?: string): Promise<ITeamlea
                 return reject(`Error in Teamleader response: ${(err && err.message)}`);
             }
 
-            if (body.errors && Array.isArray(body.errors) && body.errors.some((error: { title: string, status: number }) => error.title.includes('Access token'))) {
+            if (isAccessTokenExpired(body)) {
                 return reject(new AccessTokenExpiredException());
             }
 
             if (resp.statusCode !== 200) {
+                body = body || {};
                 body.code = resp.statusCode;
             }
             resolve(body);
         });
     });
+}
+
+function isAccessTokenExpired(body: any): boolean {
+    return body &&
+        body.errors &&
+        Array.isArray(body.errors) &&
+        body.errors.some((error: { title: string, status: number }) => error.title.includes('Access token'));
 }
 
 export function isContactResponse(response: ITeamleaderContactResponse | ITeamleaderContactsResponse | ITeamleaderUpdateResponse | ITeamleaderAuthResponse): response is ITeamleaderContactsResponse {
