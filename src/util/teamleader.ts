@@ -10,7 +10,7 @@ import {
 import { AccessTokenExpiredException, isContactResponse, isUpdateResponse, makeRequest } from './make-request';
 import parseEnvironment from './parse-environment';
 
-const apiDomain = 'https://api.teamleader.eu';
+const apiDomain = 'https://api.focus.teamleader.eu';
 
 async function _createContact(
     accessToken: string,
@@ -142,7 +142,7 @@ export const deleteContact = refreshTokenOnError(_deleteContact);
 export function getTokens(code: string): Promise<ITeamleaderAuthResponse> {
     const { TEAMLEADER_CLIENT_ID, TEAMLEADER_CLIENT_SECRET, TEAMLEADER_REDIRECT_URL } = parseEnvironment();
     const reqOptions = {
-        url: `https://app.teamleader.eu/oauth2/access_token`,
+        url: `https://focus.teamleader.eu/oauth2/access_token`,
         method: RequestMethods.POST,
         body: {
             code,
@@ -157,7 +157,7 @@ export function getTokens(code: string): Promise<ITeamleaderAuthResponse> {
 
 export function getOAuth2RedirectUrl(): string {
     const { TEAMLEADER_CLIENT_ID, TEAMLEADER_REDIRECT_URL } = parseEnvironment();
-    return 'https://app.teamleader.eu/oauth2/authorize?' + querystring.encode({
+    return 'https://focus.teamleader.eu/oauth2/authorize?' + querystring.encode({
             client_id: TEAMLEADER_CLIENT_ID,
             response_type: 'code',
             redirect_uri: TEAMLEADER_REDIRECT_URL
