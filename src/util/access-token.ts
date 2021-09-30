@@ -24,7 +24,7 @@ export async function authorizeApiKey(apiKey: string, refresh: boolean): Promise
 function getNewAccessToken(refreshToken: string): Promise<ITeamleaderAuthResponse> {
     const { TEAMLEADER_CLIENT_ID, TEAMLEADER_CLIENT_SECRET } = parseEnvironment();
     const reqOptions = {
-        url: `https://app.teamleader.eu/oauth2/access_token`,
+        url: `https://focus.teamleader.eu/oauth2/access_token`,
         method: RequestMethods.POST,
         body: {
             refresh_token: refreshToken,
